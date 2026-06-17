@@ -3,6 +3,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Domestic China/NAS build mirrors. Uncomment if official sources are slow.
+      # args:
+      #   DEBIAN_MIRROR: https://mirrors.tuna.tsinghua.edu.cn/debian
+      #   DEBIAN_SECURITY_MIRROR: https://mirrors.tuna.tsinghua.edu.cn/debian-security
+      #   PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
     env_file:
       - .env.local
     environment:
@@ -16,6 +21,8 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api
+        # Domestic China/NAS npm mirror. Uncomment if npmjs is slow.
+        # NPM_CONFIG_REGISTRY: https://registry.npmmirror.com
     depends_on:
       - backend
     ports:

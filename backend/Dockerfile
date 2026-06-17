@@ -1,8 +1,13 @@
 FROM python:3.12-slim-bookworm
 
-ARG DEBIAN_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian
-ARG DEBIAN_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security
-ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+# Railway builds from overseas, so official sources are the safest defaults.
+# For domestic China/NAS builds, override these build args, for example:
+#   DEBIAN_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian
+#   DEBIAN_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security
+#   PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG DEBIAN_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
+ARG PIP_INDEX_URL=https://pypi.org/simple
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

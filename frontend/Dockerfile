@@ -1,6 +1,9 @@
 FROM node:24-alpine AS build
 
-ARG NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+# Railway builds from overseas, so npmjs is the default.
+# For domestic China/NAS builds, override with:
+#   NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org
 ENV NPM_CONFIG_REGISTRY=$NPM_CONFIG_REGISTRY
 
 WORKDIR /app
