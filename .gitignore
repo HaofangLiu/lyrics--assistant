@@ -1,0 +1,16 @@
+node_modules
+frontend/node_modules
+.pnpm-store
+frontend/.pnpm-store
+.vite
+frontend/.vite
+dist
+frontend/dist
+tsconfig.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+__pycache__
+.venv
+backend/.venv
+.env
+.env.local
+.env.*.local

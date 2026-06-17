@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="跟唱屏">
+  <rect width="512" height="512" rx="112" fill="#090a0f"/>
+  <circle cx="256" cy="256" r="188" fill="#121826"/>
+  <path d="M175 323c0-45 36-81 81-81s81 36 81 81" fill="none" stroke="#f8fafc" stroke-width="38" stroke-linecap="round"/>
+  <path d="M179 196h154" stroke="#38bdf8" stroke-width="38" stroke-linecap="round"/>
+  <path d="M210 143h92" stroke="#facc15" stroke-width="34" stroke-linecap="round"/>
+  <path d="M158 373h196" stroke="#34d399" stroke-width="34" stroke-linecap="round"/>
+</svg>

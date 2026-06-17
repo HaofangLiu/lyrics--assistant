@@ -1,0 +1,19 @@
+{
+  "name": "跟唱屏",
+  "short_name": "跟唱屏",
+  "description": "开车跟唱用的歌词显示助手",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090a0f",
+  "theme_color": "#090a0f",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
