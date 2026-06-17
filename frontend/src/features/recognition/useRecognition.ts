@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
+import { releaseMicrophoneStream } from './audioCapture'
 import { recognizeCurrentSong } from './recognitionService'
 import type { RecognitionStatus } from './types'
 
@@ -25,6 +26,7 @@ export function useRecognition() {
     onError: () => {
       setStatus('failed')
       setLevel(0)
+      releaseMicrophoneStream()
     },
   })
 

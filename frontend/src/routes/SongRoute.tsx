@@ -189,6 +189,6 @@ function formatTime(ms: number) {
 
 function getFollowHint(song: { durationSec?: number }, fallbackIntervalSec: number) {
   return song.durationSec
-    ? '接近结束时检查下一首'
+    ? '结束后自动检查下一首'
     : `未知时长每 ${fallbackIntervalSec} 秒检查`
 }

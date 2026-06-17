@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { getSettings } from '../settings/settingsStore'
 import { recognizeCurrentSong } from '../recognition/recognitionService'
+import { releaseMicrophoneStream } from '../recognition/audioCapture'
 import type { SongMatch } from '../recognition/types'
 
-const END_CHECK_LEAD_MS = 12_000
-const AFTER_END_RETRY_MS = 10_000
-const MIN_DURATION_CHECK_DELAY_MS = 8_000
+const FOLLOW_SAMPLE_DURATION_MS = 6_000
+const TRANSITION_CHECK_AFTER_END_MS = 1_500
+const TRANSITION_RETRY_MS = 4_000
 
 export type SingAlongStatus =
   | 'idle'
@@ -36,6 +37,14 @@ export function useSingAlongSession({
   onSongChangeRef.current = onSongChange
 
   useEffect(() => {
+    if (!enabled) {
+      releaseMicrophoneStream()
+    }
+  }, [enabled])
+
+  useEffect(() => () => releaseMicrophoneStream(), [])
+
+  useEffect(() => {
     if (!enabled || !currentSong) {
       setStatus('idle')
       return
@@ -56,6 +65,7 @@ export function useSingAlongSession({
         try {
           setStatus('listening')
           const result = await recognizeCurrentSong({
+            durationMs: FOLLOW_SAMPLE_DURATION_MS,
             onPhase: (phase) => setStatus(phase === 'listening' ? 'listening' : 'recognizing'),
           })
 
@@ -103,11 +113,11 @@ function getNextCheckDelayMs(song: SongMatch | undefined, fallbackIntervalSec: n
   }
 
   const remainingMs = song.durationSec * 1000 - getEstimatedPositionMs(song)
-  if (remainingMs <= 0) {
-    return AFTER_END_RETRY_MS
+  if (remainingMs <= TRANSITION_CHECK_AFTER_END_MS) {
+    return TRANSITION_RETRY_MS
   }
 
-  return Math.max(MIN_DURATION_CHECK_DELAY_MS, remainingMs - END_CHECK_LEAD_MS)
+  return remainingMs + TRANSITION_CHECK_AFTER_END_MS
 }
 
 function getEstimatedPositionMs(song: SongMatch) {
