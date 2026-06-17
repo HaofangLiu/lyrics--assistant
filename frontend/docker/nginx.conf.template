@@ -6,7 +6,12 @@ server {
   index index.html;
 
   location /api/ {
-    proxy_pass http://backend:8000/api/;
+    # Keep Docker Compose local proxy support, but resolve the service lazily.
+    # Railway frontend builds should use VITE_API_BASE_URL with the backend public URL,
+    # so this path is normally unused there.
+    resolver 127.0.0.11 valid=30s ipv6=off;
+    set $api_upstream backend:8000;
+    proxy_pass http://$api_upstream/api/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
