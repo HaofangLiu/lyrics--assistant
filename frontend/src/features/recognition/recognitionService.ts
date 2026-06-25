@@ -24,14 +24,16 @@ export async function recognizeCurrentSong({
     onLevel,
     keepStreamAlive: false,
   })
+  const recordingEndedAt = Date.now()
 
   onPhase?.('recognizing')
   const result = await recognizeWithBackend(sample)
 
-  // ACRCloud 的 play_offset_ms 是录音那一刻的歌曲位置。
-  // 把 playbackStartedAt 设为录音开始时间，这样 elapsed 自动包含
-  // 录音时长 + 网络耗时，歌词位置 = play_offset_ms + elapsed，和实际播放对齐。
-  result.song.playbackStartedAt = new Date(recordingStartedAt).toISOString()
+  // ACRCloud 的 play_offset_ms 对应录音结束那一刻的歌曲位置。
+  // 把 playbackStartedAt 设为录音结束时间，这样：
+  //   position = play_offset_ms + (now - recordingEndedAt)
+  // 只包含网络/识别耗时（约 1-2s），残余误差用 ±1s 校准按钮微调。
+  result.song.playbackStartedAt = new Date(recordingEndedAt).toISOString()
 
   return result
 }
