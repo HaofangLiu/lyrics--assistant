@@ -1,19 +1,25 @@
 # 跟唱屏
 
-面向车载跟唱场景的 Web App。前端负责录音和歌词展示，Python 后端负责调用 ACRCloud 识曲。
+面向车载跟唱场景的 Web App / PWA。前端负责录音、识曲触发和歌词展示，Python 后端负责调用 ACRCloud 识曲和 DashScope LLM 生成歌词搜索候选。
 
 ## 项目结构
 
 ```text
 lyrics-assistant/
-  frontend/              # React + Vite + TanStack 前端
+  frontend/              # React 19 + Vite + TanStack 前端
     src/
-    public/
+      app/               # providers、router
+      components/        # AppShell、LyricsViewport、StatusPill
+      features/          # lyrics / recognition / settings / singAlong / pwa / storage
+      routes/            # HomeRoute、SongRoute、SettingsRoute
+      styles/            # tokens.css、app.css
+    public/              # manifest、service worker、app-icon
+    docker/              # nginx.conf.template
     Dockerfile
-    docker/nginx.conf
     package.json
-  backend/               # Python FastAPI 后端
+  backend/               # Python FastAPI 后端（单模块 app/main.py）
     app/
+      main.py
     Dockerfile
     requirements.txt
   docker-compose.yml     # 本地/部署编排
@@ -80,6 +86,11 @@ http://127.0.0.1:8080
 
 Docker 会启动两个服务：
 
-- `frontend`: Nginx 静态站点，监听 `8080`
-- `backend`: FastAPI API，监听 `8000`
-- `POST /api/lyrics/candidates`: LRCLIB 本地查询失败后，调用 DashScope `deepseek-v4-flash` 生成歌手/歌名候选；不生成整首歌词。
+- `frontend`: Nginx 静态站点，监听 `8080`，代理 `/api` 到 backend。
+- `backend`: FastAPI + ffmpeg，监听 `8000`。
+
+## 后端接口
+
+- `GET /health`：健康检查，返回 `{"status":"ok"}`。
+- `POST /api/recognize`：上传音频文件，ffmpeg 转码为 FLAC 后调用 ACRCloud 识曲，返回 `RecognitionResult`。
+- `POST /api/lyrics/candidates`：传入歌曲元数据，调用 DashScope LLM 生成最多 5 条 LRCLIB 搜索候选（歌手/歌名清洗），不生成整首歌词。LLM 未配置或调用失败时返回空列表。

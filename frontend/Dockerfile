@@ -21,6 +21,10 @@ COPY src ./src
 ARG VITE_API_BASE_URL=/api
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
+# 付费端点鉴权 token，须与 backend 的 APP_ACCESS_TOKEN 一致
+ARG VITE_APP_TOKEN=
+ENV VITE_APP_TOKEN=$VITE_APP_TOKEN
+
 RUN pnpm build
 
 FROM nginx:1.27-alpine

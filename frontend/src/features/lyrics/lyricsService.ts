@@ -1,4 +1,5 @@
 import type { SongMatch } from '../recognition/types'
+import { getAppAuthHeaders } from '../recognition/backendRecognitionClient'
 import { getCachedLyrics, saveLyrics } from './lyricsCache'
 import { parseLrc, plainTextToLyrics } from './lrcParser'
 import type { LyricsDocument } from './types'
@@ -106,6 +107,7 @@ async function fetchAiLyricsCandidates(song: SongMatch): Promise<LyricsQueryCand
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...getAppAuthHeaders(),
     },
     body: JSON.stringify({
       song: {

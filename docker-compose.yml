@@ -11,7 +11,12 @@ services:
     env_file:
       - .env.local
     environment:
-      CORS_ALLOW_ORIGINS: "*"
+      # 本地 compose 下前端经 nginx 同源代理 /api，浏览器 Origin 即 localhost:8080。
+      # 可用环境变量覆盖；公网部署请设为真实前端域名，不要用 *。
+      CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:8080}"
+      # 付费端点鉴权 token（与前端 VITE_APP_TOKEN 必须一致）；按 IP 每分钟限流次数。
+      APP_ACCESS_TOKEN: "${APP_ACCESS_TOKEN:-}"
+      RATE_LIMIT_PER_MIN: "${RATE_LIMIT_PER_MIN:-30}"
     ports:
       - "8000:8000"
 
@@ -21,6 +26,8 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api
+        # 与 backend 的 APP_ACCESS_TOKEN 必须一致
+        VITE_APP_TOKEN: "${APP_ACCESS_TOKEN:-}"
         # Domestic China/NAS npm mirror. Uncomment if npmjs is slow.
         # NPM_CONFIG_REGISTRY: https://registry.npmmirror.com
     depends_on:

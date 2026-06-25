@@ -52,6 +52,7 @@ async function sendRecognizeRequest(sample: AudioSample): Promise<RecognitionRes
     response = await fetch(`${getApiBaseUrl()}/recognize`, {
       method: 'POST',
       body: formData,
+      headers: getAppAuthHeaders(),
       signal: controller.signal,
     })
   } catch (error) {
@@ -88,6 +89,13 @@ function wait(ms: number) {
 
 function getApiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+}
+
+// 共享密钥头：拦截顺手刷 / 扫描器对付费端点的滥用。
+// 注意：打包进前端的 token 不是真正的秘密，真正兜底的是后端按 IP 限流。
+export function getAppAuthHeaders(): Record<string, string> {
+  const token = import.meta.env.VITE_APP_TOKEN
+  return token ? { 'X-App-Token': token } : {}
 }
 
 function getFileName(mimeType: string) {

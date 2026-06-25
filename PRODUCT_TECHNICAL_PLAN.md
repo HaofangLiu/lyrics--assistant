@@ -52,35 +52,42 @@ docker-compose.yml
 
 ## 前端功能
 
-- 首页：标题 + 居中大圆形“开启跟唱”按钮。
-- 歌词页：大字号歌词、当前行高亮、手动快慢校准。
-- 自动跟唱：开启后根据当前歌曲时长，在接近结束时重新识曲；无歌曲时长时使用低频兜底检查。
-- 设置页：采样时长、兜底检查间隔、歌词字号。
-- PWA：可添加到手机主屏幕。
+- 首页：标题 + 居中大圆形"开启跟唱"按钮。
+- 歌词页：大字号歌词、当前行高亮、手动快慢校准、自动跟唱开关。
+- 自动跟唱：开启后根据当前歌曲时长，在接近结束时重新识曲；无歌曲时长时使用低频兜底检查。歌词页右上角可切换开关。
+- 设置页：自动跟唱开关、采样时长（8/12/15 秒）、兜底检查间隔、歌词字号缩放、恢复默认。
+- 屏幕常亮：歌词页通过 Wake Lock API 保持屏幕常亮，随"恢复默认"重置，当前未在设置页暴露独立开关。
+- PWA：已配置 manifest 和 Service Worker，可通过浏览器自带机制添加到主屏幕；暂无应用内安装引导 UI。
 
 ## 后端功能
 
 - `GET /health`：健康检查。
 - `POST /api/recognize`：上传音频并识曲。
 - `POST /api/lyrics/candidates`：LRCLIB 本地查询失败后，用 DashScope `deepseek-v4-flash` 清洗歌曲信息并返回搜索候选；不生成整首歌词。
-- 环境变量读取 ACRCloud 配置。
+- 环境变量读取 ACRCloud 和 DashScope 配置。
 - `ffmpeg` 统一转码，提升浏览器录音兼容性。
-- ACRCloud 签名和请求。
+- ACRCloud HMAC-SHA1 签名和请求。
 - 将 ACRCloud 结果映射成前端统一的 `RecognitionResult`。
+- DashScope LLM 调用失败时静默返回空候选列表，前端降级为仅使用本地候选。
 
 ## 环境变量
 
 ```env
-RECOGNITION_PROVIDER=acrcloud
+# ACRCloud 识曲
 ACRCLOUD_HOST=
 ACRCLOUD_ACCESS_KEY=
 ACRCLOUD_ACCESS_SECRET=
 
-VITE_API_BASE_URL=/api
-
+# DashScope LLM 歌词搜索候选（留空则跳过 AI 候选）
 DASHSCOPE_API_KEY=
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 DASHSCOPE_MODEL=deepseek-v4-flash
+
+# CORS 允许来源，逗号分隔；生产环境应设为前端域名
+CORS_ALLOW_ORIGINS=*
+
+# 前端构建期变量
+VITE_API_BASE_URL=/api
 ```
 
 ## Docker 部署

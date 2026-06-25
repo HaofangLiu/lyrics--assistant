@@ -6,20 +6,75 @@ import json
 import os
 import tempfile
 import time
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 
+# 共享密钥：前端构建期注入、请求带 X-App-Token，后端校验。
+# 留空则放行（方便本地开发），公网部署务必设置。
+APP_ACCESS_TOKEN = os.getenv("APP_ACCESS_TOKEN", "").strip()
+# 按 IP 限流：每个 IP 每分钟最多多少次付费请求（<=0 关闭）。
+RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "30") or "30")
+RATE_LIMIT_WINDOW_SEC = 60
+
+_rate_lock = asyncio.Lock()
+_rate_hits: dict[str, deque[float]] = defaultdict(deque)
+
 
 app = FastAPI(title="Lyrics Assistant API")
+
+
+def get_client_ip(request: Request) -> str:
+  # Railway / nginx 会把真实来源放在 X-Forwarded-For，取第一个
+  forwarded = request.headers.get("x-forwarded-for")
+  if forwarded:
+    return forwarded.split(",")[0].strip()
+  return request.client.host if request.client else "unknown"
+
+
+def verify_app_token(x_app_token: str | None = Header(default=None)) -> None:
+  if not APP_ACCESS_TOKEN:
+    return
+  if not x_app_token or not hmac.compare_digest(x_app_token, APP_ACCESS_TOKEN):
+    raise HTTPException(status_code=401, detail="Invalid or missing app token")
+
+
+async def enforce_rate_limit(request: Request) -> None:
+  if RATE_LIMIT_PER_MIN <= 0:
+    return
+
+  ip = get_client_ip(request)
+  now = time.time()
+  cutoff = now - RATE_LIMIT_WINDOW_SEC
+
+  async with _rate_lock:
+    hits = _rate_hits[ip]
+    while hits and hits[0] < cutoff:
+      hits.popleft()
+
+    if len(hits) >= RATE_LIMIT_PER_MIN:
+      retry_after = max(1, int(hits[0] + RATE_LIMIT_WINDOW_SEC - now))
+      raise HTTPException(
+        status_code=429,
+        detail="Too many requests",
+        headers={"Retry-After": str(retry_after)},
+      )
+
+    hits.append(now)
+
+
+async def guard(request: Request, _token: None = Depends(verify_app_token)) -> None:
+  # 先校验 token（廉价拒绝未授权），再对授权请求做按 IP 限流
+  await enforce_rate_limit(request)
 
 app.add_middleware(
   CORSMiddleware,
@@ -47,14 +102,20 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/api/lyrics/candidates")
-async def create_lyrics_candidates(payload: LyricsCandidateRequest) -> dict[str, Any]:
+async def create_lyrics_candidates(
+  payload: LyricsCandidateRequest,
+  _guard: None = Depends(guard),
+) -> dict[str, Any]:
   return {
     "candidates": await get_ai_lyrics_candidates(payload.song),
   }
 
 
 @app.post("/api/recognize")
-async def recognize(audio: UploadFile = File(...)) -> dict[str, Any]:
+async def recognize(
+  audio: UploadFile = File(...),
+  _guard: None = Depends(guard),
+) -> dict[str, Any]:
   content = await audio.read()
   if not content:
     raise HTTPException(status_code=400, detail="Empty audio file")
