@@ -67,6 +67,7 @@ export function SongRoute() {
       saveCurrentSong(reanchoredSong)
       setSong(reanchoredSong)
     },
+    fallbackIntervalSec: settings.followCheckIntervalSec,
   })
 
   const singAlongBusy = singAlong.status === 'listening' || singAlong.status === 'recognizing'
@@ -242,6 +243,7 @@ function getSingAlongLabel(status: SingAlongStatus, enabled: boolean) {
     recognizing: '跟唱中',
     'same-song': '跟唱中',
     'new-song': '切换中',
+    'no-match': '未识别',
     failed: '跟唱中',
   }
 
