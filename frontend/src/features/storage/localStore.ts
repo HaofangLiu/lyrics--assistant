@@ -11,10 +11,15 @@ export function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-export function writeJson<T>(key: string, value: T) {
+export function writeJson<T>(key: string, value: T): boolean {
   if (typeof window === 'undefined') {
-    return
+    return false
   }
 
-  window.localStorage.setItem(key, JSON.stringify(value))
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+    return true
+  } catch {
+    return false
+  }
 }

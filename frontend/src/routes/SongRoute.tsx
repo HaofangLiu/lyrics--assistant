@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { ChevronLeft, Clock3, Minus, Pause, Play, Plus } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { LyricsViewport } from '../components/LyricsViewport'
 import { StatusPill } from '../components/StatusPill'
 import { getLyricsForSong } from '../features/lyrics/lyricsService'
@@ -10,6 +10,7 @@ import { getLyricOffset, saveLyricOffset } from '../features/lyrics/offsetStore'
 import type { LyricLine } from '../features/lyrics/types'
 import { useWakeLock } from '../features/pwa/useWakeLock'
 import { useSingAlongSession, type SingAlongStatus } from '../features/singAlong/useSingAlongSession'
+import type { SongMatch } from '../features/recognition/types'
 import { getCurrentSong, saveCurrentSong } from '../features/storage/currentSongStore'
 import { updateSettings, useSettings } from '../features/settings/settingsStore'
 
@@ -17,13 +18,29 @@ export function SongRoute() {
   const { songId } = useParams({ from: '/song/$songId' })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const song = useMemo(() => {
+  const [song, setSong] = useState<SongMatch | null>(() => {
     const currentSong = getCurrentSong()
     return currentSong?.id === songId ? currentSong : null
+  })
+
+  useEffect(() => {
+    const currentSong = getCurrentSong()
+    setSong(currentSong?.id === songId ? currentSong : null)
   }, [songId])
+
   const settings = useSettings()
   const [offsetMs, setOffsetMs] = useState(() => getLyricOffset(songId))
+  const [offsetSongId, setOffsetSongId] = useState(songId)
   const [positionMs, setPositionMs] = useState(0)
+
+  // 切歌时 TanStack Router 复用同一组件实例，offsetMs 这类 state 不会自动重置。
+  // 在渲染期同步把 offset 切换成新歌自己的存档，避免：
+  // 1) 上一首的校准值串到新歌的歌词显示；
+  // 2) 下面的持久化 effect 把旧 offset 写进新歌的存储 key，破坏用户校准数据。
+  if (offsetSongId !== songId) {
+    setOffsetSongId(songId)
+    setOffsetMs(getLyricOffset(songId))
+  }
 
   useWakeLock(settings.keepScreenAwake)
 
@@ -44,6 +61,10 @@ export function SongRoute() {
       })
       navigate({ to: '/song/$songId', params: { songId: nextSong.id } })
     },
+    onReanchor: (reanchoredSong) => {
+      saveCurrentSong(reanchoredSong)
+      setSong(reanchoredSong)
+    },
   })
 
   useEffect(() => {
@@ -59,8 +80,13 @@ export function SongRoute() {
   }, [offsetMs, song])
 
   useEffect(() => {
+    // offsetSongId 与 songId 一致才说明 offset 已是当前歌的值，可安全持久化；
+    // 切歌的过渡渲染里两者不等，跳过写入以防覆盖新歌的校准存档
+    if (offsetSongId !== songId) {
+      return
+    }
     saveLyricOffset(songId, offsetMs)
-  }, [offsetMs, songId])
+  }, [offsetMs, offsetSongId, songId])
 
   if (!song) {
     return (

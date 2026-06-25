@@ -5,6 +5,7 @@ import { parseLrc, plainTextToLyrics } from './lrcParser'
 import type { LyricsDocument } from './types'
 
 const LRCLIB_API_BASE_URL = 'https://lrclib.net/api'
+const FETCH_TIMEOUT_MS = 12_000
 
 type LrcLibResponse = {
   id: number
@@ -35,7 +36,7 @@ type AiLyricsCandidateResponse = {
 
 export async function getLyricsForSong(song: SongMatch): Promise<LyricsDocument> {
   const cached = getCachedLyrics(song.id)
-  if (cached && cached.source !== 'empty') {
+  if (cached) {
     return cached
   }
 
@@ -103,7 +104,7 @@ async function findLyricsForCandidates(
 }
 
 async function fetchAiLyricsCandidates(song: SongMatch): Promise<LyricsQueryCandidate[]> {
-  const response = await fetch(`${getApiBaseUrl()}/lyrics/candidates`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/lyrics/candidates`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -139,7 +140,7 @@ async function fetchLrcLibGet(
   song: SongMatch,
   candidate: LyricsQueryCandidate,
 ): Promise<LyricsDocument | undefined> {
-  const response = await fetch(`${LRCLIB_API_BASE_URL}/get?${buildLrcLibParams(candidate)}`)
+  const response = await fetchWithTimeout(`${LRCLIB_API_BASE_URL}/get?${buildLrcLibParams(candidate)}`)
   if (!response.ok) {
     return undefined
   }
@@ -156,7 +157,7 @@ async function fetchLrcLibSearch(
     artist_name: candidate.artistName,
     track_name: candidate.trackName,
   })
-  const response = await fetch(`${LRCLIB_API_BASE_URL}/search?${params}`)
+  const response = await fetchWithTimeout(`${LRCLIB_API_BASE_URL}/search?${params}`)
   if (!response.ok) {
     return undefined
   }
@@ -352,4 +353,17 @@ function normalizeForCompare(value: string) {
 
 function getApiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+}
+
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } finally {
+    window.clearTimeout(timeout)
+  }
 }

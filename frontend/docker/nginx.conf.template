@@ -6,6 +6,9 @@ server {
   index index.html;
 
   location /api/ {
+    # 上传体积上限，与后端 MAX_UPLOAD_BYTES 对齐；超限直接 413，不转发给后端
+    client_max_body_size 12m;
+
     # Keep Docker Compose local proxy support, but resolve the service lazily.
     # Railway frontend builds should use VITE_API_BASE_URL with the backend public URL,
     # so this path is normally unused there.

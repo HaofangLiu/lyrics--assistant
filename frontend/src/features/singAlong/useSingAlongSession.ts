@@ -33,20 +33,24 @@ type UseSingAlongSessionArgs = {
   enabled: boolean
   currentSong?: SongMatch
   onSongChange: (song: SongMatch) => void
+  onReanchor?: (song: SongMatch) => void
 }
 
 export function useSingAlongSession({
   enabled,
   currentSong,
   onSongChange,
+  onReanchor,
 }: UseSingAlongSessionArgs) {
   const [status, setStatus] = useState<SingAlongStatus>('idle')
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null)
   const currentSongRef = useRef(currentSong)
   const onSongChangeRef = useRef(onSongChange)
+  const onReanchorRef = useRef(onReanchor)
 
   currentSongRef.current = currentSong
   onSongChangeRef.current = onSongChange
+  onReanchorRef.current = onReanchor
 
   useEffect(() => {
     if (!enabled) {
@@ -106,6 +110,7 @@ export function useSingAlongSession({
           // 让下一轮"剩余时长"的估算重新基于真实 play_offset
           tracked = result.song
           setStatus('same-song')
+          onReanchorRef.current?.(result.song)
         } catch (error) {
           if (cancelled) {
             return

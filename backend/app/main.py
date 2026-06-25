@@ -14,10 +14,16 @@ from typing import Any
 import httpx
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
+OVERSIZE_DETAIL = "Audio file is too large"
+
+# ACRCloud status.code 中表示"没识别到"的码，映射 404；
+# 其余（配额耗尽 3003/3015、密钥错误 3001、服务端错误等）映射 502。
+ACRLOUD_NO_MATCH_CODES = {1001}
 
 # 共享密钥：前端构建期注入、请求带 X-App-Token，后端校验。
 # 留空则放行（方便本地开发），公网部署务必设置。
@@ -31,6 +37,22 @@ _rate_hits: dict[str, deque[float]] = defaultdict(deque)
 
 
 app = FastAPI(title="Lyrics Assistant API")
+
+
+@app.middleware("http")
+async def limit_upload_size(request: Request, call_next):
+  # 在 body 被解析/落盘之前就按 Content-Length 拦掉超大请求，
+  # 避免攻击者用大上传撑爆内存/磁盘（此时鉴权依赖还没运行）。
+  content_length = request.headers.get("content-length")
+  if content_length:
+    try:
+      declared = int(content_length)
+    except ValueError:
+      declared = -1
+    if declared > MAX_UPLOAD_BYTES:
+      return JSONResponse(status_code=413, content={"detail": OVERSIZE_DETAIL})
+
+  return await call_next(request)
 
 
 def get_client_ip(request: Request) -> str:
@@ -86,10 +108,10 @@ app.add_middleware(
 
 
 class LyricsCandidateSong(BaseModel):
-  title: str
-  artist: str
-  album: str | None = None
-  durationSec: int | None = None
+  title: str = Field(max_length=200)
+  artist: str = Field(max_length=200)
+  album: str | None = Field(default=None, max_length=200)
+  durationSec: int | None = Field(default=None, ge=0, le=86400)
 
 
 class LyricsCandidateRequest(BaseModel):
@@ -116,12 +138,9 @@ async def recognize(
   audio: UploadFile = File(...),
   _guard: None = Depends(guard),
 ) -> dict[str, Any]:
-  content = await audio.read()
+  content = await read_capped(audio, MAX_UPLOAD_BYTES)
   if not content:
     raise HTTPException(status_code=400, detail="Empty audio file")
-
-  if len(content) > MAX_UPLOAD_BYTES:
-    raise HTTPException(status_code=413, detail="Audio file is too large")
 
   suffix = guess_suffix(audio.filename, audio.content_type)
   temp_path: Path | None = None
@@ -154,6 +173,22 @@ async def recognize(
       temp_path.unlink(missing_ok=True)
     if flac_path:
       flac_path.unlink(missing_ok=True)
+
+
+async def read_capped(upload: UploadFile, max_bytes: int) -> bytes:
+  # 分块读取并累计校验，一旦超过上限立即拒绝，
+  # 把内存占用钉死在 max_bytes 内（兜底 Content-Length 被伪造/缺失/chunked 编码的情况）。
+  chunk_size = 64 * 1024
+  buffer = bytearray()
+  while True:
+    chunk = await upload.read(chunk_size)
+    if not chunk:
+      break
+    buffer.extend(chunk)
+    if len(buffer) > max_bytes:
+      raise HTTPException(status_code=413, detail=OVERSIZE_DETAIL)
+
+  return bytes(buffer)
 
 
 def guess_suffix(filename: str | None, content_type: str | None) -> str:
@@ -378,7 +413,11 @@ async def recognize_with_acrcloud(sample_path: Path, duration_sec: float | None)
   if response.status_code >= 400:
     raise HTTPException(status_code=502, detail=f"ACRCloud request failed: {response.status_code}")
 
-  data = response.json()
+  try:
+    data = response.json()
+  except Exception:
+    raise HTTPException(status_code=502, detail="ACRCloud returned non-JSON response")
+
   status = data.get("status") or {}
   print(
     "acrcloud response",
@@ -391,8 +430,12 @@ async def recognize_with_acrcloud(sample_path: Path, duration_sec: float | None)
     flush=True,
   )
 
-  if status.get("code") != 0:
-    raise HTTPException(status_code=404, detail=status.get("msg") or "ACRCloud no match")
+  code = status.get("code")
+  if code != 0:
+    msg = status.get("msg") or "ACRCloud error"
+    if code in ACRLOUD_NO_MATCH_CODES:
+      raise HTTPException(status_code=404, detail=msg)
+    raise HTTPException(status_code=502, detail=f"ACRCloud error ({code}): {msg}")
 
   music = data.get("metadata", {}).get("music") or []
   if not music:
@@ -451,14 +494,25 @@ def get_probe_duration(probe: dict[str, Any] | None) -> float | None:
     return None
 
   duration = (probe.get("format") or {}).get("duration")
-  if duration:
-    return float(duration)
+  parsed = parse_probe_duration(duration)
+  if parsed is not None:
+    return parsed
 
   for stream in probe.get("streams") or []:
-    if stream.get("duration"):
-      return float(stream["duration"])
+    parsed = parse_probe_duration(stream.get("duration"))
+    if parsed is not None:
+      return parsed
 
   return None
+
+
+def parse_probe_duration(value: Any) -> float | None:
+  if not value or value == "N/A":
+    return None
+  try:
+    return float(value)
+  except (ValueError, TypeError):
+    return None
 
 
 async def run_command(

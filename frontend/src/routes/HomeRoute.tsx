@@ -24,7 +24,12 @@ export function HomeRoute() {
 
   const startRecognition = async () => {
     updateSettings({ autoFollowEnabled: true })
-    const result = await recognition.recognize()
+    let result
+    try {
+      result = await recognition.recognize()
+    } catch {
+      return
+    }
     saveCurrentSong(result.song)
     queryClient.prefetchQuery({
       queryKey: ['lyrics', result.song.id],
