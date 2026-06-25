@@ -22,7 +22,7 @@ export async function recognizeCurrentSong({
   const sample = await captureAudioSample({
     durationMs: sampleDurationMs,
     onLevel,
-    keepStreamAlive: false,
+    keepStreamAlive: settings.autoFollowEnabled,
   })
   const recordingEndedAt = Date.now()
 
