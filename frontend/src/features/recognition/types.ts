@@ -1,11 +1,8 @@
 export type RecognitionStatus =
   | 'idle'
-  | 'permission-needed'
   | 'listening'
   | 'recognizing'
   | 'matched'
-  | 'lyrics-loading'
-  | 'ready'
   | 'failed'
 
 export type SongMatch = {
@@ -26,12 +23,6 @@ export type SongMatch = {
 export type RecognitionResult = {
   song: SongMatch
   source: 'acrcloud'
-}
-
-export type AudioSample = {
-  blob?: Blob
-  durationSec: number
-  peakLevel: number
 }
 
 export type RecognitionErrorCode =

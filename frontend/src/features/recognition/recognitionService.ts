@@ -5,23 +5,19 @@ import type { RecognitionResult } from './types'
 
 type RecognizeOptions = {
   durationMs?: number
-  onLevel?: (level: number) => void
   onPhase?: (phase: 'listening' | 'recognizing') => void
 }
 
 export async function recognizeCurrentSong({
   durationMs,
-  onLevel,
   onPhase,
 }: RecognizeOptions = {}): Promise<RecognitionResult> {
   const settings = getSettings()
   const sampleDurationMs = durationMs ?? settings.sampleDurationSec * 1000
 
   onPhase?.('listening')
-  const recordingStartedAt = Date.now()
   const sample = await captureAudioSample({
     durationMs: sampleDurationMs,
-    onLevel,
     keepStreamAlive: settings.autoFollowEnabled,
   })
   const recordingEndedAt = Date.now()

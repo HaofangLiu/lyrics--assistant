@@ -1,4 +1,4 @@
-import { RecognitionError, type AudioSample, type RecognitionResult } from './types'
+import { RecognitionError, type RecognitionResult } from './types'
 
 type BackendError = {
   detail?: string
@@ -8,8 +8,8 @@ const REQUEST_TIMEOUT_MS = 20_000
 const MAX_ATTEMPTS = 3
 const RETRY_BASE_DELAY_MS = 800
 
-export async function recognizeWithBackend(sample: AudioSample): Promise<RecognitionResult> {
-  if (!sample.blob) {
+export async function recognizeWithBackend(blob: Blob | undefined): Promise<RecognitionResult> {
+  if (!blob) {
     throw new RecognitionError('audio-unavailable', '没有可上传的录音')
   }
 
@@ -17,7 +17,7 @@ export async function recognizeWithBackend(sample: AudioSample): Promise<Recogni
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await sendRecognizeRequest(sample)
+      return await sendRecognizeRequest(blob)
     } catch (error) {
       const recognitionError = toRecognitionError(error)
 
@@ -40,9 +40,9 @@ export async function recognizeWithBackend(sample: AudioSample): Promise<Recogni
   throw lastError ?? new RecognitionError('network', '后端识曲失败')
 }
 
-async function sendRecognizeRequest(sample: AudioSample): Promise<RecognitionResult> {
+async function sendRecognizeRequest(blob: Blob): Promise<RecognitionResult> {
   const formData = new FormData()
-  formData.append('audio', sample.blob!, getFileName(sample.blob!.type))
+  formData.append('audio', blob, getFileName(blob.type))
 
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)

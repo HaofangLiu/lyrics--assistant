@@ -8,12 +8,9 @@ import { saveCurrentSong } from '../features/storage/currentSongStore'
 
 const statusText = {
   idle: '待识曲',
-  'permission-needed': '需要麦克风',
   listening: '正在听',
   recognizing: '正在识别',
   matched: '已识别',
-  'lyrics-loading': '加载歌词',
-  ready: '准备好了',
   failed: '识别失败',
 }
 

@@ -57,7 +57,7 @@ docker-compose.yml
 - 自动跟唱：开启后根据当前歌曲时长，在接近结束时重新识曲；无歌曲时长时使用低频兜底检查。歌词页右上角可切换开关。
 - 设置页：自动跟唱开关、采样时长（8/12/15 秒）、兜底检查间隔、歌词字号缩放、恢复默认。
 - 屏幕常亮：歌词页通过 Wake Lock API 保持屏幕常亮，随"恢复默认"重置，当前未在设置页暴露独立开关。
-- PWA：已配置 manifest 和 Service Worker，可通过浏览器自带机制添加到主屏幕；暂无应用内安装引导 UI。
+- PWA：已配置 manifest 和 Service Worker，可通过浏览器自带机制添加到主屏幕；刻意不内置应用内安装引导 UI，保持代码精简。
 
 ## 后端功能
 
@@ -65,7 +65,7 @@ docker-compose.yml
 - `POST /api/recognize`：上传音频并识曲。
 - `POST /api/lyrics/candidates`：LRCLIB 本地查询失败后，用 DashScope `deepseek-v4-flash` 清洗歌曲信息并返回搜索候选；不生成整首歌词。
 - 环境变量读取 ACRCloud 和 DashScope 配置。
-- `ffmpeg` 统一转码，提升浏览器录音兼容性。
+- `ffmpeg` 统一转码为 FLAC，提升浏览器录音兼容性；识曲链路为 ffmpeg→ACRCloud 直连，不做额外的音频探测步骤。
 - ACRCloud HMAC-SHA1 签名和请求。
 - 将 ACRCloud 结果映射成前端统一的 `RecognitionResult`。
 - DashScope LLM 调用失败时静默返回空候选列表，前端降级为仅使用本地候选。

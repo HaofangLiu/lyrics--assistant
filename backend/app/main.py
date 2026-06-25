@@ -146,28 +146,13 @@ async def recognize(
   temp_path: Path | None = None
   flac_path: Path | None = None
 
-  print(
-    "recognize upload",
-    {
-      "filename": audio.filename,
-      "content_type": audio.content_type,
-      "size": len(content),
-      "suffix": suffix,
-    },
-    flush=True,
-  )
-
   try:
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
       temp_file.write(content)
       temp_path = Path(temp_file.name)
 
-    source_probe = await log_audio_probe(temp_path, "source")
-    duration_sec = get_probe_duration(source_probe)
     flac_path = await normalize_audio_to_flac(temp_path)
-    await log_audio_probe(flac_path, "normalized-flac")
-
-    return await recognize_with_acrcloud(flac_path, duration_sec)
+    return await recognize_with_acrcloud(flac_path)
   finally:
     if temp_path:
       temp_path.unlink(missing_ok=True)
@@ -352,39 +337,19 @@ async def get_ai_lyrics_candidates(song: LyricsCandidateSong) -> list[dict[str, 
       },
     )
 
-  print(
-    "ai lyrics candidates",
-    {
-      "model": config["model"],
-      "input_title": song.title,
-      "input_artist": song.artist,
-      "candidate_count": len(normalized[:5]),
-    },
-    flush=True,
-  )
   return normalized[:5]
 
 
-async def recognize_with_acrcloud(sample_path: Path, duration_sec: float | None) -> dict[str, Any]:
+async def recognize_with_acrcloud(sample_path: Path) -> dict[str, Any]:
   config = get_acrcloud_config()
   if not config["host"] or not config["access_key"] or not config["access_secret"]:
     raise HTTPException(status_code=500, detail="Missing ACRCloud configuration")
 
   sample = sample_path.read_bytes()
   timestamp = str(int(time.time()))
-  signature_version = "1"
-  data_type = "audio"
-  http_method = "POST"
   http_uri = "/v1/identify"
   string_to_sign = "\n".join(
-    [
-      http_method,
-      http_uri,
-      config["access_key"],
-      data_type,
-      signature_version,
-      timestamp,
-    ],
+    ["POST", http_uri, config["access_key"], "audio", "1", timestamp],
   )
   signature = base64.b64encode(
     hmac.new(
@@ -394,21 +359,20 @@ async def recognize_with_acrcloud(sample_path: Path, duration_sec: float | None)
     ).digest(),
   ).decode("utf-8")
 
-  url = f"https://{config['host']}{http_uri}"
   form_data = {
     "access_key": config["access_key"],
     "sample_bytes": str(len(sample)),
     "timestamp": timestamp,
     "signature": signature,
-    "data_type": data_type,
-    "signature_version": signature_version,
+    "data_type": "audio",
+    "signature_version": "1",
   }
   files = {
     "sample": ("sample.flac", sample, "audio/flac"),
   }
 
   async with httpx.AsyncClient(timeout=20) as client:
-    response = await client.post(url, data=form_data, files=files)
+    response = await client.post(f"https://{config['host']}{http_uri}", data=form_data, files=files)
 
   if response.status_code >= 400:
     raise HTTPException(status_code=502, detail=f"ACRCloud request failed: {response.status_code}")
@@ -419,17 +383,6 @@ async def recognize_with_acrcloud(sample_path: Path, duration_sec: float | None)
     raise HTTPException(status_code=502, detail="ACRCloud returned non-JSON response")
 
   status = data.get("status") or {}
-  print(
-    "acrcloud response",
-    {
-      "code": status.get("code"),
-      "msg": status.get("msg"),
-      "sample_bytes": len(sample),
-      "duration": duration_sec,
-    },
-    flush=True,
-  )
-
   code = status.get("code")
   if code != 0:
     msg = status.get("msg") or "ACRCloud error"
@@ -441,78 +394,7 @@ async def recognize_with_acrcloud(sample_path: Path, duration_sec: float | None)
   if not music:
     raise HTTPException(status_code=404, detail="ACRCloud no music result")
 
-  return to_acrcloud_recognition_result(music[0], duration_sec)
-
-
-async def log_audio_probe(path: Path, label: str) -> dict[str, Any] | None:
-  try:
-    stdout = await run_command(
-      [
-        "ffprobe",
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration:stream=codec_name,codec_type,sample_rate,channels,duration",
-        "-of",
-        "json",
-        str(path),
-      ],
-      timeout=10,
-      error_status=422,
-      error_prefix=f"Could not probe {label} audio",
-      log_failure=False,
-    )
-    data = json.loads(stdout)
-    print(
-      "audio probe",
-      {
-        "label": label,
-        "path": str(path),
-        "size": path.stat().st_size,
-        "format": data.get("format"),
-        "streams": data.get("streams"),
-      },
-      flush=True,
-    )
-    return data
-  except HTTPException as exc:
-    print(
-      "audio probe failed",
-      {
-        "label": label,
-        "path": str(path),
-        "size": path.stat().st_size if path.exists() else 0,
-        "detail": exc.detail,
-      },
-      flush=True,
-    )
-    return None
-
-
-def get_probe_duration(probe: dict[str, Any] | None) -> float | None:
-  if not probe:
-    return None
-
-  duration = (probe.get("format") or {}).get("duration")
-  parsed = parse_probe_duration(duration)
-  if parsed is not None:
-    return parsed
-
-  for stream in probe.get("streams") or []:
-    parsed = parse_probe_duration(stream.get("duration"))
-    if parsed is not None:
-      return parsed
-
-  return None
-
-
-def parse_probe_duration(value: Any) -> float | None:
-  if not value or value == "N/A":
-    return None
-  try:
-    return float(value)
-  except (ValueError, TypeError):
-    return None
+  return to_acrcloud_recognition_result(music[0])
 
 
 async def run_command(
@@ -520,23 +402,12 @@ async def run_command(
   timeout: int,
   error_status: int,
   error_prefix: str,
-  log_failure: bool = True,
 ) -> str:
   stdout, stderr, returncode = await run_process(command, timeout)
 
   if returncode != 0:
     message = stderr.decode("utf-8", errors="ignore").strip()
     detail = f"{error_prefix}: {message}" if message else error_prefix
-    if log_failure:
-      print(
-        "command failed",
-        {
-          "command": command,
-          "returncode": returncode,
-          "detail": detail,
-        },
-        flush=True,
-      )
     raise HTTPException(status_code=error_status, detail=detail)
 
   return stdout.decode("utf-8", errors="replace")
@@ -605,44 +476,29 @@ def clean_optional_int(value: Any) -> int | None:
   return None
 
 
-def to_acrcloud_recognition_result(result: dict[str, Any], sample_duration_sec: float | None) -> dict[str, Any]:
+def to_acrcloud_recognition_result(result: dict[str, Any]) -> dict[str, Any]:
   now = datetime.now(timezone.utc).isoformat()
   artists = result.get("artists") or []
   artist = " / ".join(item.get("name", "") for item in artists if item.get("name")) or "未知歌手"
   album = result.get("album") or {}
   external_metadata = result.get("external_metadata") or {}
   musicbrainz = external_metadata.get("musicbrainz") or {}
+  mb_track_id = musicbrainz.get("track", {}).get("id")
   title = result.get("title") or "未知歌曲"
-  score = float(result.get("score") or 0) / 100
   duration_ms = result.get("duration_ms")
-  play_offset_ms = result.get("play_offset_ms") or 0
-  estimated_position_ms = int(play_offset_ms)
-
-  print(
-    "acrcloud match",
-    {
-      "title": title,
-      "artist": artist,
-      "score": score,
-      "sample_duration_sec": sample_duration_sec,
-      "play_offset_ms": play_offset_ms,
-      "estimated_position_ms": estimated_position_ms,
-    },
-    flush=True,
-  )
 
   song = {
-    "id": result.get("acrid") or musicbrainz.get("track", {}).get("id") or title,
+    "id": result.get("acrid") or mb_track_id or title,
     "recognitionId": result.get("acrid") or "",
-    "musicBrainzRecordingId": musicbrainz.get("track", {}).get("id"),
+    "musicBrainzRecordingId": mb_track_id,
     "title": title,
     "artist": artist,
     "album": album.get("name"),
     "durationSec": round(duration_ms / 1000) if duration_ms else None,
-    "score": score,
+    "score": float(result.get("score") or 0) / 100,
     "matchedAt": now,
     "playbackStartedAt": now,
-    "estimatedPositionMs": estimated_position_ms,
+    "estimatedPositionMs": int(result.get("play_offset_ms") or 0),
     "artworkColor": "#34d399",
   }
 
