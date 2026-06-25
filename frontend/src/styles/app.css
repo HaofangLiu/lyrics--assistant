@@ -495,6 +495,41 @@
   font-size: 25px;
 }
 
+.re-recognize-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: min(100%, 720px);
+  margin: 0 auto;
+}
+
+.re-recognize-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 24px;
+  border: 1px solid rgba(52, 211, 153, 0.34);
+  border-radius: var(--button-radius);
+  background: rgba(52, 211, 153, 0.1);
+  color: #6ee7b7;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.re-recognize-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.re-recognize-error {
+  color: #fecdd3;
+  font-weight: 700;
+  font-size: 14px;
+}
+
 .settings-screen {
   gap: 18px;
   padding-top: 4px;

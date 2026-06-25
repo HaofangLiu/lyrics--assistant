@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
-import { ChevronLeft, Clock3, Minus, Pause, Play, Plus } from 'lucide-react'
+import { ChevronLeft, Clock3, Minus, Pause, Play, Plus, RefreshCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { LyricsViewport } from '../components/LyricsViewport'
 import { StatusPill } from '../components/StatusPill'
@@ -10,6 +10,7 @@ import { getLyricOffset, saveLyricOffset } from '../features/lyrics/offsetStore'
 import type { LyricLine } from '../features/lyrics/types'
 import { useWakeLock } from '../features/pwa/useWakeLock'
 import { useSingAlongSession, type SingAlongStatus } from '../features/singAlong/useSingAlongSession'
+import { useRecognition } from '../features/recognition/useRecognition'
 import type { SongMatch } from '../features/recognition/types'
 import { getCurrentSong, saveCurrentSong } from '../features/storage/currentSongStore'
 import { updateSettings, useSettings } from '../features/settings/settingsStore'
@@ -29,6 +30,7 @@ export function SongRoute() {
   }, [songId])
 
   const settings = useSettings()
+  const recognition = useRecognition()
   const [offsetMs, setOffsetMs] = useState(() => getLyricOffset(songId))
   const [offsetSongId, setOffsetSongId] = useState(songId)
   const [positionMs, setPositionMs] = useState(0)
@@ -66,6 +68,29 @@ export function SongRoute() {
       setSong(reanchoredSong)
     },
   })
+
+  const singAlongBusy = singAlong.status === 'listening' || singAlong.status === 'recognizing'
+
+  const handleReRecognize = async () => {
+    let result
+    try {
+      result = await recognition.recognize()
+    } catch {
+      return
+    }
+
+    if (result.song.id === songId) {
+      saveCurrentSong(result.song)
+      setSong(result.song)
+    } else {
+      saveCurrentSong(result.song)
+      queryClient.prefetchQuery({
+        queryKey: ['lyrics', result.song.id],
+        queryFn: () => getLyricsForSong(result.song),
+      })
+      navigate({ to: '/song/$songId', params: { songId: result.song.id } })
+    }
+  }
 
   useEffect(() => {
     if (!song) {
@@ -184,6 +209,23 @@ export function SongRoute() {
           <span>1 秒</span>
         </button>
       </div>
+
+      <div className="re-recognize-bar">
+        <button
+          className="re-recognize-button"
+          type="button"
+          disabled={recognition.isWorking || singAlongBusy}
+          onClick={handleReRecognize}
+        >
+          <RefreshCcw size={20} aria-hidden="true" />
+          {recognition.isWorking ? reRecognizeStatusText(recognition.status) : '重新识曲'}
+        </button>
+        {recognition.error ? (
+          <span className="re-recognize-error">
+            {recognition.error instanceof Error ? recognition.error.message : '识别失败'}
+          </span>
+        ) : null}
+      </div>
     </section>
   )
 }
@@ -217,4 +259,10 @@ function getFollowHint(song: { durationSec?: number }, fallbackIntervalSec: numb
   return song.durationSec
     ? '结束后自动检查下一首'
     : `未知时长每 ${fallbackIntervalSec} 秒检查`
+}
+
+function reRecognizeStatusText(status: string) {
+  if (status === 'listening') return '正在听'
+  if (status === 'recognizing') return '正在识别'
+  return '识别中'
 }
